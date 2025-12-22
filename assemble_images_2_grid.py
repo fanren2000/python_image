@@ -6,6 +6,71 @@ import random
 import re
 from PIL import Image, ImageDraw, ImageFont
 
+import random
+
+def resize_to_fill(img, target_w, target_h, crop_mode="center",
+                   weights={"top": 1, "center": 1, "bottom": 1}):
+    """
+    Resize while preserving aspect ratio, then crop to fill target size.
+    crop_mode:
+        "top"    → prioritize head
+        "center" → balanced
+        "bottom" → prioritize feet
+        "random" → weighted random choice among top/center/bottom
+
+    weights: dict controlling probability when crop_mode="random"
+        e.g., {"top": 3, "center": 1, "bottom": 1}
+    """
+
+    # -----------------------------
+    # 1. Handle random crop mode
+    # -----------------------------
+    if crop_mode == "random":
+        modes = ["top", "center", "bottom"]
+        probs = [weights.get(m, 1) for m in modes]
+        crop_mode = random.choices(modes, weights=probs, k=1)[0]
+
+    # -----------------------------
+    # 2. Resize to cover target area
+    # -----------------------------
+    h, w = img.shape[:2]
+    target_ratio = target_w / target_h
+    img_ratio = w / h
+
+    if img_ratio > target_ratio:
+        # Image is wider → height matches, width overflows
+        new_h = target_h
+        new_w = int(img_ratio * new_h)
+    else:
+        # Image is taller → width matches, height overflows
+        new_w = target_w
+        new_h = int(new_w / img_ratio)
+
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # -----------------------------
+    # 3. Compute crop offsets
+    # -----------------------------
+    y_excess = new_h - target_h
+    x_excess = new_w - target_w
+
+    # Horizontal crop always centered
+    x1 = x_excess // 2
+
+    # Vertical crop depends on crop_mode
+    if crop_mode == "top":
+        y1 = 0
+    elif crop_mode == "bottom":
+        y1 = y_excess
+    else:  # "center"
+        y1 = y_excess // 2
+
+    # -----------------------------
+    # 4. Crop and return
+    # -----------------------------
+    cropped = resized[y1:y1 + target_h, x1:x1 + target_w]
+    return cropped
+
 def second_sort_key(path):
     """
     Extracts the numeric seconds from filenames like 'frame_1.99s.jpg'
@@ -171,45 +236,6 @@ def apply_shape_with_gradient_border(
 
     # Return both result and mask (mask is used for background compositing)
     return result, mask, border_mask
-
-def put_chinese_text_tmp(img, text, font_path, font_size, color, opacity, angle):
-    # Convert OpenCV image (BGR) to PIL image (RGB)
-    img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).convert("RGBA")
-
-    # Create transparent overlay (same size as base image)
-    overlay = Image.new("RGBA", img_pil.size, (255,255,255,0))
-    draw = ImageDraw.Draw(overlay)
-
-    # Load font
-    font = ImageFont.truetype(font_path, font_size)
-
-    # Measure text
-    bbox = draw.textbbox((0,0), text, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-
-    # Position text in center of overlay
-    text_x = (overlay.width - text_w) // 2
-    text_y = (overlay.height - text_h) // 2
-    draw.text((text_x, text_y), text, font=font,
-              fill=(color[2], color[1], color[0], int(255*opacity)))
-
-    # Rotate overlay
-    rotated_overlay = overlay.rotate(angle, expand=True)
-
-    # Create a new transparent canvas same size as base image
-    overlay_canvas = Image.new("RGBA", img_pil.size, (255,255,255,0))
-
-    # Center the rotated overlay on the canvas
-    ox = (overlay_canvas.width - rotated_overlay.width) // 2
-    oy = (overlay_canvas.height - rotated_overlay.height) // 2
-    overlay_canvas.paste(rotated_overlay, (ox, oy), rotated_overlay)
-
-    # Composite watermark
-    img_pil = Image.alpha_composite(img_pil, overlay_canvas)
-
-    # Convert back to OpenCV image
-    return cv2.cvtColor(np.array(img_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
 
 def add_text_watermark(
     image,
@@ -451,7 +477,13 @@ def images_to_grid(
 
     # 6. Resize all images to cell size
     resized_images = [
-        cv2.resize(img, (cell_width, cell_height), interpolation=cv2.INTER_AREA)
+        resize_to_fill(
+            img,
+            cell_width,
+            cell_height,
+            crop_mode="random",
+            weights={"top": 6, "center": 3, "bottom": 1}
+        )
         for img in images
     ]
 
@@ -506,18 +538,20 @@ def images_to_grid(
 # Example usage:
 default_image = "Source/sunflower_gift_rz.jpg"      # renzhener_signature_1.jpg"
 images_to_grid("frames_output", "grid_chinese_diamond.jpg",
-               rows=5,
-               cols=7,
-               theme="clean",   # luxury, clean, neon, romantic
-               border_thickness=50,
-               padding=50,
+               rows=10,
+               cols=8,
+               theme="romantic",   # luxury, clean, neon, romantic
+               border_thickness=30,
+               padding=30,
                default_image_path=default_image,
                add_watermark=True,
-               watermark_text="认真儿2025精彩瞬间2",
+               watermark_text="认真儿2025精彩瞬间3",
                watermark_opacity=0.65,
                font_path="simhei.ttf",
-               font_size=435,
-               cell_shape="diamond",
+               font_size=185,
+               cell_shape="round",
+               cell_height=300,
+               cell_width=300,
                watermark_angle=60)
 
 

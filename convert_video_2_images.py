@@ -51,12 +51,10 @@ def video_to_images(video_path, output_folder, frame_skip=1, second_skip=None):
     cap.release()
     print(f"✅ Done! Extracted {saved_count} frames to '{output_folder}'")
 
-
-# sourceVideo = "Source/aiWoDeRen_greenQipao_dance.mp4"
-sourceVideo = "Source/beiJiaErHuPan_yellowSkirt_barre.mp4"
+sourceVideo = "Source/guiLai_yellowSkirt_shaGuo_dance.mp4"
 # Example usage:
 # Extract every 10th frame:
 # video_to_images("input_video.mp4", "frames_output", frame_skip=10)
 
 # Extract a frame every 2 seconds, filenames include timestamps:
-video_to_images(sourceVideo, "frames_output", second_skip=2)
+video_to_images(sourceVideo, "frames_output", frame_skip=25, second_skip=None)
